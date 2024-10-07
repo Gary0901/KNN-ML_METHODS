@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Fingerprint Collection</title>
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    <h1>Browser Fingerprint Collection</h1>
+    <p>Your browser fingerprint is being collected...</p>
+    <p id="status">正在檢查你的資料是否已存在於資料庫...</p>
+    <button onclick="collectAndSendFingerprint()">Login</button>
+    <div id="status"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fingerprintjs2/2.1.0/fingerprint2.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ const Fingerprint = require('./models/Fingerprint');
 const { selectFeatures } = require('./public/featureSelection');
 const { identifyUser } = require('./public/userIdentification'); 
 const { v4 : uuidv4 } = require('uuid');
+const path = require('path');
 
 const app = express();
 const port = 3000;
@@ -82,5 +83,10 @@ app.post('/login', async (req, res) => {
 app.listen(port,()=>{
     console.log(`Server is running at http://localhost:${port}`);
 })
+
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something went wrong!');
+  });
 
 module.exports = app;

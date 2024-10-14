@@ -1,3 +1,4 @@
+require('dotenv').config(); // 載入.env 檔案，讓我們可以存取環境變數。
 const express = require('express');
 const connectDB = require('./db');
 const Fingerprint = require('./models/Fingerprint');

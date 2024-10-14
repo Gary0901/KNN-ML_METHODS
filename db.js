@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 
 const connectDB = async() =>{
     try{
-        await mongoose.connect('mongodb+srv://gary50132:NvHvn8TGSroRRC9o@cluster0-forknn-method.g2inm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0-forKNN-method',{
-            useNewUrlParser: true,
+        await mongoose.connect(process.env.MONGODB_URI,{
             useUnifiedTopology: true,
         });
         console.log('MongoDB connected successfully'); 

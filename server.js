@@ -15,6 +15,9 @@ connectDB(); // 連接到MongoDB 資料庫。
 app.use(express.json()); // 允許服務器解釋JSON格式的請求體。
 app.use(express.static('public')); // 設置靜態文件服務，使public文件夾中的文件可以直接被訪問。
 
+app.get('/',(req,res)=>{
+    res.sendFile(path.join(__dirname,'public','index.html'))
+})
 
 app.post('/login', async (req, res) => {
     try {

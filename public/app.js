@@ -93,6 +93,6 @@ document.getElementById('identifyButton').addEventListener('click', identifyUser
     mongoDB Atlas
     username: gary50132
     Password : NvHvn8TGSroRRC9o
-
+    
     mongodb+srv://gary50132:<db_password>@cluster0-forknn-method.g2inm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0-forKNN-method
 */

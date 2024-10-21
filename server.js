@@ -36,46 +36,47 @@ app.post('/login', async (req, res) => {
         }
         
         // Select features
-        const selectedFeatures = selectFeatures(allFingerprints,0.1,0.7,5); // 可以進一步降低閾值
+        const selectedFeatures = allFingerprints.length >0 ? selectFeatures(allFingerprints,0.1,0.7,5):[]; // 可以進一步降低閾值
         console.log("Selected Features:",selectedFeatures);
         
         // Identify user
         const identificationResult = identifyUser(allFingerprints, { fingerprint, components }, selectedFeatures,5);
         console.log(`Identification result:${JSON.stringify(identificationResult)}`);
 
-        if (existingFingerprint || identificationResult.isAuthentic && identificationResult.probability >=0.8) {
-            if(existingFingerprint) {
-                res.json({
-                    message:" User identified and found in database",
-                    fingerprint : existingFingerprint.fingerprint,
-                    probability : identificationResult.probability
-                });
-            } else {
-                console.log("Warning : User identified as authentic but not found in database.")
-                // User identified but not in database, save them
-                const newFingerprint = new Fingerprint({
-                    fingerprint,
-                    components,
-                });
-                await newFingerprint.save();
-                res.json({ 
-                    message: "User identified but not found in database. New entry created.",
-                    fingerprint: newFingerprint.fingerprint,
-                    probability: identificationResult.probability
-                });
-            }
+        if (existingFingerprint) {
+            res.json({
+                message: "User identified and found in database",
+                fingerprint: existingFingerprint.fingerprint,
+                probability: identificationResult.probability,
+                distance: identificationResult.distance,
+                threshold: identificationResult.threshold
+            });
         } else {
-            // User not identified, save as new user
+            // Always create a new fingerprint if it doesn't exist in the database 
             const newFingerprint = new Fingerprint({
                 fingerprint,
                 components,
+                isAuthentic:true
             });
             await newFingerprint.save();
-            res.json({ 
-                message: "New user created",
-                fingerprint: newFingerprint.fingerprint,
-                probability: identificationResult.probability
-            });
+
+            if(identificationResult.isAuthentic) {
+                res.json({
+                    message:"User identified as similar to existing users but not found in database.New entry created.",
+                    fingerprint: newFingerprint.fingerprint,
+                    probability: identificationResult.probability,
+                    distance: identificationResult.distance,
+                    threshold: identificationResult.threshold
+                });
+            } else {
+                res.json({
+                    message:"New user created.",
+                    fingerprint:newFingerprint.fingerprint,
+                    probability:identificationResult.probability,
+                    distance: identificationResult.distance,
+                    threshold: identificationResult.threshold
+                });
+            }
         }
     } catch (err) {
         console.error('Error in /login:',err);

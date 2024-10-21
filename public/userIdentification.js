@@ -2,6 +2,16 @@
 const _= require('lodash'); //添加這行來引入 lodash
 
 function identifyUser(knownFingerprints, newFingerprint, selectedFeatures,k = 5){
+    if(knownFingerprints.length === 0 || selectedFeatures.length === 0) {
+        console.log("No known fingerprints of selected features.Treating as new user");
+        return {
+            isAuthentic: false,
+            probability: 0,
+            distance: Infinity,
+            threshold: Infinity
+        };
+    }
+
     // 計算指紋與所有已知指紋的距離
     const distances = knownFingerprints.map(known=>{
         const distance = calculateDistance(known, newFingerprint, selectedFeatures);
@@ -10,20 +20,26 @@ function identifyUser(knownFingerprints, newFingerprint, selectedFeatures,k = 5)
 
     // 按距離排序並選擇k個最近鄰
     distances.sort((a,b) => a.distance - b.distance);
-    const nearestNeighbors = distances.slice(0,k);
+    const nearestNeighbors = distances.slice(0, Math.min(k, distances.length));
 
     // 計算認證概率，即K個最近鄰中真實用戶的比例
-    const authenticCount = nearestNeighbors.filter(n=>n.fingerprint.isAuthentic).length;
-    const probability = authenticCount / k; // 計算認證概率。
+    const authenticCount = nearestNeighbors.filter(n => n.fingerprint.isAuthentic).length;
+    const probability = authenticCount / nearestNeighbors.length; // 計算認證概率。
 
     /*  例如，如果 K = 5（考慮 5 個最近鄰），而其中 3 個是authentic的，那麼：
         authenticCount 將會是 3
         probability 將會是 3/5 = 0.6，即 60% 的概率 
     */
 
-    const meanDistance = _.mean(nearestNeighbors.map(n => n.distance));
-    const stdDevDistance = Math.sqrt(_.mean(nearestNeighbors.map(n => Math.pow(n.distance - meanDistance, 2))));
-    const threshold = meanDistance + stdDevDistance;
+    let meanDistance = 0;
+    let stdDevDistance = 0;
+    let threshold = Infinity;
+
+    if (nearestNeighbors.length > 0) {
+        meanDistance = _.mean(nearestNeighbors.map(n => n.distance));
+        stdDevDistance = Math.sqrt(_.mean(nearestNeighbors.map(n => Math.pow(n.distance - meanDistance, 2))));
+        threshold = meanDistance + stdDevDistance;
+    }
 
     console.log("Nearest neighbors:",nearestNeighbors.map(n=>({
         distance:n.distance,
@@ -32,10 +48,13 @@ function identifyUser(knownFingerprints, newFingerprint, selectedFeatures,k = 5)
     })));
     console.log("Mean distance:",meanDistance,"StdDev:",stdDevDistance,"Threshold:",threshold);
 
+    // Adjust the conditions for isAuthentic 
+    const isAuthentic = probability > 0.5 && distances[0].distance < threshold;
+
     return {
-        isAuthentic: probability > 0.5 && distances[0].distance < threshold,
+        isAuthentic: isAuthentic,
         probability: probability,
-        distance: distances[0].distance,
+        distance: distances[0]?.distance || Infinity,
         threshold: threshold
     };
 }

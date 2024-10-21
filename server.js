@@ -26,29 +26,32 @@ app.post('/login', async (req, res) => {
         
         // Get all fingerprints from the database
         const allFingerprints = await Fingerprint.find();
-        console.log("allFingerprints",allFingerprints);
-        
-        console.log("Number of fingerprints:", allFingerprints.length);
-        console.log("Sample fingerprint components:", allFingerprints[0].components.slice(0, 3));
+        console.log(`Total fingerprints in database: ${allFingerprints.length}`);
+
+        const existingFingerprint = allFingerprints.find(fp=>fp.fingerprint === fingerprint);
+        if (existingFingerprint) {
+            console.log(`Found existing fingerprint: ${fingerprint}`);
+        } else {
+            console.log(`No existing fingerprint found for: ${fingerprint}`)
+        }
         
         // Select features
-        const selectedFeatures = selectFeatures(allFingerprints,0.2); // 可以進一步降低閾值
+        const selectedFeatures = selectFeatures(allFingerprints,0.1,0.7,5); // 可以進一步降低閾值
         console.log("Selected Features:",selectedFeatures);
         
         // Identify user
-        const identificationResult = identifyUser(allFingerprints, { fingerprint, components }, selectedFeatures);
-        
-        if (identificationResult.isAuthentic) {
-            // User identified, check if in database
-            const existingFingerprint = await Fingerprint.findOne({ fingerprint });
-            
-            if (existingFingerprint) {
-                res.json({ 
-                    message: "User identified and found in database",
-                    fingerprint: existingFingerprint.fingerprint,
-                    probability: identificationResult.probability
+        const identificationResult = identifyUser(allFingerprints, { fingerprint, components }, selectedFeatures,5);
+        console.log(`Identification result:${JSON.stringify(identificationResult)}`);
+
+        if (existingFingerprint || identificationResult.isAuthentic && identificationResult.probability >=0.8) {
+            if(existingFingerprint) {
+                res.json({
+                    message:" User identified and found in database",
+                    fingerprint : existingFingerprint.fingerprint,
+                    probability : identificationResult.probability
                 });
             } else {
+                console.log("Warning : User identified as authentic but not found in database.")
                 // User identified but not in database, save them
                 const newFingerprint = new Fingerprint({
                     fingerprint,
@@ -75,7 +78,7 @@ app.post('/login', async (req, res) => {
             });
         }
     } catch (err) {
-        console.error(err);
+        console.error('Error in /login:',err);
         res.status(500).json({ error: 'Failed to process login' });
     }
 });

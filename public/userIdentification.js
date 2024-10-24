@@ -1,112 +1,80 @@
 // 實現了 K nearest neighbors 的算法。它接受已知的指紋，新的指紋，選定的特徵值和K值作為參數。
 const _= require('lodash'); //添加這行來引入 lodash
 
-function determineOptimalK(totalFingerprints) {
-    // 常見的經驗法則 : k = √n，其中n為樣本總數
-    const k = Math.round(Math.sqrt(totalFingerprints.length));
-
-    // 設置合理的上下限
-    const minK = 3;  // 至少要3個鄰居
-    const maxK = 15; // 至少要15個鄰居
-
-    return Math.min(Math.max(k,minK),maxK);
-}
-
 function identifyUser(knownFingerprints, newFingerprint, selectedFeatures){
-    const k = determineOptimalK(knownFingerprints);
     if(knownFingerprints.length === 0 || selectedFeatures.length === 0) {
         console.log("No known fingerprints of selected features.Treating as new user");
         return {
             isSameUser : false,
             predictedUserId : null, // 使用 _id
-            confidence : 0,
-            nearestDistance : Infinity,
-            nearestNeighbors:[] // 添加以便追蹤
+            distance: Infinity,
         };
     }
 
-    // 計算指紋與所有已知指紋的距離
-    const distances = knownFingerprints.map(known=>{
-        const distance = calculateDistance(known, newFingerprint, selectedFeatures);
-        return { 
-            userId: known._id, // 儲存 _id 
-            distance : distance,
-            fingerprint: known.fingerprint // 保留fingerprint 以便除錯
-         };
-    });
+    try {
+        // 計算指紋與所有已知指紋的距離
+        const distances = knownFingerprints.map(known=>{
+            const distance = calculateDistance(known, newFingerprint, selectedFeatures);
+            return { 
+                userId: known._id, // 儲存 _id 
+                distance : distance,
+                fingerprint: known.fingerprint // 保留fingerprint 以便除錯
+            };
+        });
 
-    // 按距離排序並選擇k個最近鄰
-    distances.sort((a,b) => a.distance - b.distance);
-    const nearestNeighbors = distances.slice(0, Math.min(k, distances.length));
+        // 按距離排序並選擇最近的匹配
+        distances.sort((a,b) => a.distance - b.distance);
+        const nearestMatch = distances[0];
 
-    // 分析最近鄰中的用戶ID分布
-    const userCounts = {};
-    nearestNeighbors.forEach(n=>{
-        userCounts[n.userId] = (userCounts[n.userId] || 0) +1;
-    })
+        // 設定閾值 (這個閾值需要根據實際數據調整)
+        const threshold = 0.2;
 
-    // 選擇最多的用戶ID
-    const [mostFrequentUserId, count] = Object.entries(userCounts)
-        .sort((a,b)=>b[1] - a[1])[0];
-        
-    // 計算 confidence 
-    const confidence = count / k;
+        // 判斷是否為同一用戶。
+        const isSameUser = nearestMatch.distance < threshold;
 
-    // 計算距離閾值
-    let meanDistance = 0;
-    let stdDevDistance = 0;
-    let threshold = Infinity;
+        console.log("Distance analysis:",{
+            nearestDistance : nearestMatch.distance,
+            threshold : threshold,
+            allDistances : distances
+        });
 
-    if (nearestNeighbors.length > 0) {
-        meanDistance = _.mean(nearestNeighbors.map(n => n.distance));
-        stdDevDistance = Math.sqrt(_.mean(nearestNeighbors.map(n => Math.pow(n.distance - meanDistance, 2))));
-        threshold = meanDistance + stdDevDistance;
+        return {
+            isSameUser : isSameUser,
+            predictedUserId : isSameUser ? nearestMatch.userId : null,
+            distance : nearestMatch.distance,
+            matches:distances // 返回所有距離供分析
+        }
+    } catch (error) {
+        console.error("Error in user identification:",error);
+        return {
+            isSameUser: false,
+            predictedUserId: null,
+            distance: Infinity,
+            error: error.message
+        }
     }
-
-    console.log("Nearest neighbors:",nearestNeighbors.map(n=>({
-        distance:n.distance,
-        isAuthentic:n.fingerprint.isAuthentic,
-        fingerprintId:n.fingerprint._id
-    })));
-    console.log("Mean distance:",meanDistance,"StdDev:",stdDevDistance,"Threshold:",threshold);
-
-
-    return {
-        isSameUser : confidence >= 0.6 && distances[0].distance < threshold,
-        predictedUserId : mostFrequentUserId,
-        confidence : confidence,
-        nearestDistance : distances[0].distance,
-        threshold : threshold,
-        nearestNeighbors:nearestNeighbors // 返回最近鄰資訊以便除錯
-    };
+        
 }
 
-function calculateDistance(fp1,fp2,selectedFeatures){
-    // 先印出debug的資訊
-    console.log("Calculating distance between",selectedFeatures);
+function calculateDistance(fp1, fp2, selectedFeatures) {
+    console.log("Calculating distance between", selectedFeatures);
     
-    return selectedFeatures.reduce((sum,feature)=>{
-        const comp1 = fp1.components.find(c=>c.key === feature);
-        const comp2 = fp2.components.find(c=>c.key === feature);
+    return selectedFeatures.reduce((sum, feature) => {
+        const comp1 = fp1.components.find(c => c.key === feature);
+        const comp2 = fp2.components.find(c => c.key === feature);
 
         if(!comp1 || !comp2) {
-            console.log(`Waring :Feature${feature} not found in one of the fingerprints`);
-            return sum + 1; // Treat missing features as maximum difference  
+            console.log(`Warning: Feature ${feature} not found in one of the fingerprints`);
+            return sum + 1;
         }
 
-        /* console.log(`Comparing feature ${feature}:`, {
-            value1: comp1.value,
-            type1: typeof comp1.value,
-            value2: comp2.value,
-            type2: typeof comp2.value
-        }); */
-
-        // 針對不同類型的特徵使用不同的比較方法
         try {
+            let featureDistance;
+
             switch (feature) {
+                // 螢幕相關
                 case 'screenResolution':
                 case 'availableScreenResolution':
-                    // 確保值是字串或可以轉換為字串
                     const str1 = String(comp1.value);
                     const str2 = String(comp2.value);
                     if (str1.includes('x') && str2.includes('x')) {
@@ -114,20 +82,27 @@ function calculateDistance(fp1,fp2,selectedFeatures){
                         const [width2, height2] = str2.split('x').map(Number);
                         const widthDiff = Math.abs(width1 - width2) / Math.max(width1, width2);
                         const heightDiff = Math.abs(height1 - height2) / Math.max(height1, height2);
-                        return sum + (widthDiff + heightDiff) / 2;
+                        featureDistance = (widthDiff + heightDiff) / 2;
+                    } else {
+                        featureDistance = str1 === str2 ? 0 : 1;
                     }
-                    return sum + (str1 === str2 ? 0 : 1);
+                    break;
 
+                // 語言相關
+                case 'language':
+                case 'languages':
+                    const langs1 = Array.isArray(comp1.value) ? comp1.value : [comp1.value];
+                    const langs2 = Array.isArray(comp2.value) ? comp2.value : [comp2.value];
+                    const langIntersection = langs1.filter(l => langs2.includes(l));
+                    featureDistance = 1 - (langIntersection.length / Math.max(langs1.length, langs2.length));
+                    break;
+
+                // 插件相關
                 case 'plugins':
-                    // 安全地處理插件資訊
                     const getPluginList = (value) => {
-                        if (Array.isArray(value)) {
-                            return value;
-                        } else if (typeof value === 'string') {
-                            return value.split(',');
-                        } else if (typeof value === 'object' && value !== null) {
-                            return Object.values(value);
-                        }
+                        if (Array.isArray(value)) return value;
+                        if (typeof value === 'string') return value.split(',');
+                        if (typeof value === 'object' && value !== null) return Object.values(value);
                         return [];
                     };
 
@@ -135,35 +110,45 @@ function calculateDistance(fp1,fp2,selectedFeatures){
                     const plugins2 = new Set(getPluginList(comp2.value));
                     const intersection = new Set([...plugins1].filter(x => plugins2.has(x)));
                     const union = new Set([...plugins1, ...plugins2]);
-                    return sum + (1 - (intersection.size / union.size));
+                    featureDistance = 1 - (intersection.size / union.size);
+                    break;
 
+                // 渲染相關
                 case 'webgl':
-                    // 處理 WebGL 資訊
+                case 'canvas':
+                case 'webglVendor':
+                case 'webglRenderer':
                     if (typeof comp1.value === 'object' && typeof comp2.value === 'object') {
-                        // 如果是物件，比較其字串表示
-                        return sum + (JSON.stringify(comp1.value) === JSON.stringify(comp2.value) ? 0 : 1);
+                        featureDistance = JSON.stringify(comp1.value) === JSON.stringify(comp2.value) ? 0 : 1;
+                    } else {
+                        featureDistance = comp1.value === comp2.value ? 0 : 1;
                     }
-                    return sum + (comp1.value === comp2.value ? 0 : 1);
+                    break;
 
+                // 硬體相關
                 case 'touchSupport':
-                    // 處理觸控支援資訊
                     if (typeof comp1.value === 'object' && typeof comp2.value === 'object') {
                         const touch1 = comp1.value.maxTouchPoints || 0;
                         const touch2 = comp2.value.maxTouchPoints || 0;
-                        return sum + (touch1 === touch2 ? 0 : 0.5);
+                        featureDistance = touch1 === touch2 ? 0 : 0.5;
+                    } else {
+                        featureDistance = comp1.value === comp2.value ? 0 : 1;
                     }
-                    return sum + (comp1.value === comp2.value ? 0 : 1);
+                    break;
 
+                case 'hardwareConcurrency':
+                case 'deviceMemory':
+                    const value1 = Number(comp1.value) || 0;
+                    const value2 = Number(comp2.value) || 0;
+                    featureDistance = Math.abs(value1 - value2) / Math.max(value1, value2, 1);
+                    break;
+
+                // 字體相關
                 case 'fonts':
-                    // 處理字體列表
                     const getFontList = (value) => {
-                        if (Array.isArray(value)) {
-                            return value;
-                        } else if (typeof value === 'string') {
-                            return value.split(',');
-                        } else if (typeof value === 'object' && value !== null) {
-                            return Object.values(value);
-                        }
+                        if (Array.isArray(value)) return value;
+                        if (typeof value === 'string') return value.split(',');
+                        if (typeof value === 'object' && value !== null) return Object.values(value);
                         return [];
                     };
 
@@ -171,23 +156,57 @@ function calculateDistance(fp1,fp2,selectedFeatures){
                     const fonts2 = new Set(getFontList(comp2.value));
                     const fontIntersection = new Set([...fonts1].filter(x => fonts2.has(x)));
                     const fontUnion = new Set([...fonts1, ...fonts2]);
-                    return sum + (1 - (fontIntersection.size / fontUnion.size));
+                    featureDistance = 1 - (fontIntersection.size / fontUnion.size);
+                    break;
 
+                // 時區相關
+                case 'timezone':
+                case 'timezoneOffset':
+                    featureDistance = comp1.value === comp2.value ? 0 : 1;
+                    break;
+
+                // 瀏覽器/系統功能
+                case 'sessionStorage':
+                case 'localStorage':
+                case 'indexedDb':
+                case 'addBehavior':
+                case 'openDatabase':
+                    featureDistance = comp1.value === comp2.value ? 0 : 1;
+                    break;
+
+                // 用戶代理相關
+                case 'userAgent':
+                case 'platform':
+                case 'vendor':
+                    featureDistance = 1 - stringSimilarity(String(comp1.value), String(comp2.value));
+                    break;
+
+                // 預設比較邏輯
                 default:
-                    // 預設比較邏輯
                     if (typeof comp1.value === 'string' && typeof comp2.value === 'string') {
-                        return sum + (1 - stringSimilarity(comp1.value, comp2.value));
+                        featureDistance = 1 - stringSimilarity(comp1.value, comp2.value);
                     } else if (typeof comp1.value === 'number' && typeof comp2.value === 'number') {
-                        return sum + Math.abs(comp1.value - comp2.value) / Math.max(Math.abs(comp1.value), Math.abs(comp2.value), 1);
+                        featureDistance = Math.abs(comp1.value - comp2.value) / Math.max(Math.abs(comp1.value), Math.abs(comp2.value), 1);
                     } else if (typeof comp1.value === 'object' && typeof comp2.value === 'object') {
-                        return sum + (JSON.stringify(comp1.value) === JSON.stringify(comp2.value) ? 0 : 1);
+                        featureDistance = JSON.stringify(comp1.value) === JSON.stringify(comp2.value) ? 0 : 1;
                     } else {
-                        return sum + (comp1.value === comp2.value ? 0 : 1);
+                        featureDistance = comp1.value === comp2.value ? 0 : 1;
                     }
+                    break;
             }
+
+            // 在計算完距離後，印出比較資訊
+            console.log(`Comparing ${feature}:`, {
+                value1: comp1.value,
+                value2: comp2.value,
+                distance: featureDistance
+            });
+
+            return sum + featureDistance;
+
         } catch (error) {
             console.error(`Error comparing feature ${feature}:`, error);
-            return sum + 1; // 如果比較出錯，視為最大差異
+            return sum + 1;
         }
     }, 0) / selectedFeatures.length;
 }

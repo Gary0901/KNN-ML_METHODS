@@ -1,7 +1,7 @@
 const _ = require('lodash');
 
 // 接受指紋數據和一個唯一值閾值作為參數
-function selectFeatures(fingerprintData, uniquenessThreshold = 0.1, stabilityThreshold = 0.7, minFeatures = 5 /* , maxComputationTime = 100 */) {
+function selectFeatures(fingerprintData, uniquenessThreshold = 0.1, stabilityThreshold = 0.7, minFeatures = 7 /* , maxComputationTime = 100 */) {
     //步驟一　：　收集所有用戶的所有屬性 reduce方法遍歷所有fingerprintData
     const allFeatures = fingerprintData.reduce((acc,fp)=>{
         fp.components.forEach(comp=>{

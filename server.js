@@ -42,7 +42,7 @@ app.post('/login', async (req, res) => {
         } */
         
         // Select features
-        const selectedFeatures = allFingerprints.length > 0 ? selectFeatures(allFingerprints,0.1,0.7,5):[]; // 可以進一步降低閾值
+        const selectedFeatures = allFingerprints.length > 0 ? selectFeatures(allFingerprints,0.1,0.7,7):[]; // 可以進一步降低閾值
         console.log("Selected Features:",selectedFeatures);
         
         // 用戶識別

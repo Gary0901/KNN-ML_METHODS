@@ -12,12 +12,12 @@ function selectFeatures(fingerprintData, uniquenessThreshold = 0.1, stabilityThr
             /* acc[comp.key].times.push(comp.duration) */
         });
         return acc;
-    },{}) // acc 初始值 = {}
+    },{}) // acc 初始值 = {} 結果格式類似：{ feature1: {values: [...]}, feature2: {values: [...]} }
 
     //步驟二 : 排除無法為所有用戶計算的屬性
     const validFeatures = Object.keys(allFeatures).filter(key=>
         allFeatures[key].values.length === fingerprintData.length && 
-        !allFeatures[key].values.some(v =>v === undefined || v === null || v === '')/* &&
+        !allFeatures[key].values.some(v => v === undefined || v === null || v === '')/* &&
         _.mean(allFeatures[key].times) <= maxComputationTime */ //計算時間小於最大計算時間
     ); 
     //選擇那些在所有指紋數據中都存在的特徵。

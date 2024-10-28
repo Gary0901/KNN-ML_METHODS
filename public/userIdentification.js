@@ -1,5 +1,5 @@
-// 實現了 K nearest neighbors 的算法。它接受已知的指紋，新的指紋，選定的特徵值和K值作為參數。
 const _= require('lodash'); //添加這行來引入 lodash
+const { createSearchIndex } = require('../models/Fingerprint');
 
 function identifyUser(knownFingerprints, newFingerprint, selectedFeatures){
     if(knownFingerprints.length === 0 || selectedFeatures.length === 0) {
@@ -8,17 +8,19 @@ function identifyUser(knownFingerprints, newFingerprint, selectedFeatures){
             isSameUser : false,
             predictedUserId : null, // 使用 _id
             distance: Infinity,
+            featureDistances : {} // 添加特徵距離物件
         };
     }
 
     try {
         // 計算指紋與所有已知指紋的距離
         const distances = knownFingerprints.map(known=>{
-            const distance = calculateDistance(known, newFingerprint, selectedFeatures);
+            const {distance,featureDistances} = calculateDistance(known, newFingerprint, selectedFeatures);
             return { 
                 userId: known._id, // 儲存 _id 
                 distance : distance,
-                fingerprint: known.fingerprint // 保留fingerprint 以便除錯
+                fingerprint: known.fingerprint, // 保留fingerprint 以便除錯
+                featureDistances: featureDistances // 保存每個特徵的距離
             };
         });
 
@@ -32,6 +34,8 @@ function identifyUser(knownFingerprints, newFingerprint, selectedFeatures){
         // 判斷是否為同一用戶。
         const isSameUser = nearestMatch.distance < threshold;
 
+        console.log("Feature distances for nearest match:",nearestMatch.featureDistances);
+
         console.log("Distance analysis:",{
             nearestDistance : nearestMatch.distance,
             threshold : threshold,
@@ -42,6 +46,7 @@ function identifyUser(knownFingerprints, newFingerprint, selectedFeatures){
             isSameUser : isSameUser,
             predictedUserId : isSameUser ? nearestMatch.userId : null,
             distance : nearestMatch.distance,
+            featureDistances : nearestMatch.featureDistances, // 返回特徵距離物件
             matches:distances // 返回所有距離供分析
         }
     } catch (error) {
@@ -50,6 +55,7 @@ function identifyUser(knownFingerprints, newFingerprint, selectedFeatures){
             isSameUser: false,
             predictedUserId: null,
             distance: Infinity,
+            featureDistances: {},
             error: error.message
         }
     }
@@ -57,14 +63,18 @@ function identifyUser(knownFingerprints, newFingerprint, selectedFeatures){
 }
 
 function calculateDistance(fp1, fp2, selectedFeatures) {
-    console.log("Calculating distance between", selectedFeatures);
+    /* console.log("Calculating distance between", selectedFeatures); */
+
+    const featureDistances = {};
+
     
-    return selectedFeatures.reduce((sum, feature) => {
+    const totalDistance = selectedFeatures.reduce((sum, feature) => {
         const comp1 = fp1.components.find(c => c.key === feature);
         const comp2 = fp2.components.find(c => c.key === feature);
 
         if(!comp1 || !comp2) {
             console.log(`Warning: Feature ${feature} not found in one of the fingerprints`);
+            featureDistances[feature] = 1;
             return sum + 1;
         }
 
@@ -115,7 +125,6 @@ function calculateDistance(fp1, fp2, selectedFeatures) {
 
                 // 渲染相關
                 case 'webgl':
-                case 'canvas':
                 case 'webglVendor':
                 case 'webglRenderer':
                     if (typeof comp1.value === 'object' && typeof comp2.value === 'object') {
@@ -123,6 +132,20 @@ function calculateDistance(fp1, fp2, selectedFeatures) {
                     } else {
                         featureDistance = comp1.value === comp2.value ? 0 : 1;
                     }
+                    break;
+                
+                case 'canvas':
+                    featureDistance = compareCanvasData(comp1.value, comp2.value);
+
+                    // 如果差異不是很大，考慮將其視為相同
+                    if(featureDistance < 0.15){
+                        featureDistance = 0;
+                    }
+
+                    console.log('Canvas comparison details:', {
+                        distance: featureDistance,
+                        threshold: 0.15
+                    });
                     break;
 
                 // 硬體相關
@@ -194,21 +217,27 @@ function calculateDistance(fp1, fp2, selectedFeatures) {
                     }
                     break;
             }
+            // 在計算完距離後，儲存每個特徵的距離
+            featureDistances[feature] = featureDistance;
 
-            // 在計算完距離後，印出比較資訊
-            console.log(`Comparing ${feature}:`, {
-                value1: comp1.value,
-                value2: comp2.value,
-                distance: featureDistance
+            //可以選擇是否要印出詳細的比較資訊
+            console.log(`Feature ${feature} comparison:`,{
+                distance:featureDistance
             });
 
             return sum + featureDistance;
 
         } catch (error) {
             console.error(`Error comparing feature ${feature}:`, error);
+            featureDistances[feature] = 1;
             return sum + 1;
         }
-    }, 0) / selectedFeatures.length;
+    }, 0) 
+
+    return {
+        distance:totalDistance / selectedFeatures.length,
+        featureDistances : featureDistances
+    }
 }
 
 // 字符串相似度函數 (可使用更複雜的算法，如 Levenshtein distance)
@@ -246,6 +275,34 @@ function levenshteinDistance(a,b) {
     }
 
     return matrix[b.length][a.length];
+}
+
+function compareCanvasData(canvas1,canvas2) {
+    if(!Array.isArray(canvas1) || !Array.isArray(canvas2)){
+        return 1; // 如果格式不對，返回最大距離
+    }
+    try {
+        // 比較 winding 設置
+        const windingDistance = canvas1[0] === canvas2[0] ? 0 : 0.3; // winding 不同給予較小的懲罰
+
+        // 比較canvas fp data 
+        let dataDistance = 0;
+        if(canvas1[1]&& canvas2[1]){
+            // 只比較 base64 數據的一部分，不需要完全相同
+            const data1 = canvas1[1].slice(0, 1000); // 取前1000個字符
+            const data2 = canvas2[1].slice(0, 1000);
+            dataDistance = 1 - stringSimilarity(data1, data2);
+        } else {
+            dataDistance = 1;
+        }
+
+        // 綜合計算距離，給予不同權重
+        const totalDistance = (windingDistance * 0.3) + (dataDistance * 0.7);
+        return totalDistance;
+    } catch(error) {
+        console.error('Error comparing canvas data:', error);
+        return 1;
+    }
 }
 
 module.exports = {identifyUser};

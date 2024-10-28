@@ -42,11 +42,11 @@ app.post('/login', async (req, res) => {
         } */
         
         // Select features
-        const selectedFeatures = allFingerprints.length > 0 ? selectFeatures(allFingerprints,0.1,0.7,7):[]; // 可以進一步降低閾值
+        const selectedFeatures = allFingerprints.length > 0 ? selectFeatures(allFingerprints,0.1,0.7,11):[]; // 可以進一步降低閾值
         console.log("Selected Features:",selectedFeatures);
         
         // 用戶識別
-        const result = identifyUser(allFingerprints, { fingerprint, components }, selectedFeatures, 5);
+        const result = identifyUser(allFingerprints, { fingerprint, components }, selectedFeatures);
 
         console.log("Identification result:", result);
 
